@@ -1,0 +1,13 @@
+#SampleID	Type	Depth
+#q2:types	categorical	numeric
+Cultivo-1	Culture	15
+Cultivo-2	Culture	10
+Cultivo-3	Culture	20
+P124D-1	Soil	50
+P124D-2	Soil	50
+P124D-3	Soil	50
+P124D-4	Soil	50
+SED_D18-1	Sediment	4
+SED_D18-2	Sediment	6
+SED_D18-3	Sediment	7
+
