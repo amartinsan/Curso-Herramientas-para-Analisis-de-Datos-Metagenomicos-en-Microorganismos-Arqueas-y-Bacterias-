@@ -1,0 +1,64 @@
+########################################################################################
+#                                                                                      #
+# Anotacion taxonomica de secuencuas a partir de perfiles taxonomicos de de amplicones #
+# CIGOM & UUSMB, IBT, UNAM                                                             #
+# 10/Julio/2017                                                                        #
+#                                                                                      #
+########################################################################################
+
+1.- Reconstruccion de amplicon original. Como la secuenciacion se realiza en formato pareado de 2X300 bp para un amplicon de ~450 bp, se inicia con un paso de extension de fragmentos usando Flash v1.2.11. Este paso se realiza por muestra.
+
+        flash -r 300 -f 450 -s 30 -t 2 -o flash_out *R1.fastq *R2.fastq
+
+2.- Los fragmentos recontruidos son el input para la anotacion con parallel-meta v2.4.1 usando la base de datos de Metaxa2 v2.1. Para esto, fue necesario hacer algunas modificaciones al codigo de Parallel-meta para que aceptara la base de datos y pudiera correr blastn en lugar de megablast. Podria convenirte llevarte una copia del tarball que esta en mi bin y que tiene todas las modificaciones, solo tendrias que compilarlo y poner visible un megablast que apunte en realidad a blastn: /home/ales/bin/parallel-meta.tar.gz
+De cualquier modo, por lo general a la gente le gusta correr programas mas populares como qiime o MEGAN. Qiime es muy buena opcion mientras no lo corras con las base de datos de GG, siempre prefiere SILVA o RDP.
+
+	Con parallel-meta vs metaxa_db:
+	parallel-meta -b B -r flash_out.extendedFrags.fastq -d X -n 16 -e 2e-30
+
+	Con qiime vs SILVA:
+	pick_otus.py -i ../flash_out.extendedFrags.fasta -o otus/uclust_picked_otus --threads 16
+	
+	mkdir otus/rep_set && pick_rep_set.py -i otus/uclust_picked_otus/flash_out.extendedFrags_otus.txt -f ../flash_out.extendedFrags.fasta -l otus/rep_set/flash_out.extendedFrags_otus.log -o otus/rep_set/flash_out.extendedFrags_otus_rep_set.fasta
+	
+	assign_taxonomy.py -i otus/rep_set/flash_out.extendedFrags_otus_rep_set.fasta -o uclust_assigned_taxonomy_SIL -r /scratch/Databases/Silva_128/mod_SILVA_128_SSURef_tax_silva.fasta -t /scratch/Databases/Silva_128/mod_taxmap_ncbi_ssu_ref_128.txt
+	
+	make_otu_table.py -i otus/uclust_picked_otus/flash_out.extendedFrags_otus.txt -t uclust_assigned_taxonomy_SIL/flash_out.extendedFrags_otus_rep_set_tax_assignments.txt -o uclust_assigned_taxonomy_SIL/otu_table.biom && summarize_taxa.py -i uclust_assigned_taxonomy_SIL/otu_table.biom -o uclust_assigned_taxonomy_SIL/taxa_counts -a --suppress_biom_table_output
+
+3.- Convertir el archivo de salida de parallel taxonomy.txt a linaje:
+
+	~/scripts/taxonomy2lineage.sh taxonomy.txt
+
+4.- Los archivos de salida de parallel se integran en una matriz con un script de perl que come la lista de archivos a integrar generados en el paso anterior. Recomiendp hacer esto en un directorio aparte con ligas simbolicas a los archivos taxonomy2lineage.txt cuyos nombres correspondan a los de las muestras
+
+	~/scripts/matrix_integrator_bmk.pl file_list.txt
+
+5.- En este paso yo elimino las asignaciones diferentes a procarionte, como Eukaryota, Mitochondria y Chloroplasto con un simple sed:
+
+	sed '/Eukaryota/d;/Mitochondria/d;/Chloroplasto/d' integrated_matrix.txt > tmp
+	mv tmp integrated_matrix.txt
+
+
+6.- La matriz contiene los linajes no estandarizados con niveles intermedios faltantes o de sobra. Para estabdarizarlos, corro el script que genera el archivo clean_integrated_matrix.txt y un archivo extra con nombres que no haya encontrado por ete y que se llama rare_names.out por si se considera necesaria su curacion manual:
+
+	~/scripts/rmv_inter_levels_bmk.pl integrated_matrix.txt
+
+7.- Separo la matriz por niveles taxonomicos con un script de perl:
+
+	~/scripts/taxa_levels_mod_subspecies.pl clean_integrated_matrix.txt counts
+
+8.- La matriz puede ser normalizada en porcentaje para algun nivel taxonomico de interes que sirva para hacer graficas de barras apiladas:
+
+	~/scripts/count2percent.pl genus_matrix.txt
+
+9.- La grafica de barras apiladas las hago en R usando el siguiente codigo:
+
+phylum_table<-read.table("sort_perc_phylum_matrix.txt", header=TRUE, row.names=1)
+color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
+my_color=c(sample(color, 15), "white")	## El numero de colores corresponde al total de asignaciones en la matriz
+png("phylum.png", width = 5*300, height = 5*300, res = 300, pointsize = 8)
+par(mar=c(4.7,4,2,11))
+barplot(as.matrix(phylum_table), col=my_color, cex.axis=0.7, cex.lab=0.7, cex.names=0.6, las=2, ylab="Relative abundance (%)", legend.text=TRUE, args.legend = list(x=ncol(phylum_table)+10, y=max(colSums(phylum_table)), cex=0.6))
+dev.off()
+
+

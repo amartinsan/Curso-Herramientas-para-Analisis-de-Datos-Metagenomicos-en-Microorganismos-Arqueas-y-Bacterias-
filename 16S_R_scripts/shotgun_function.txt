@@ -1,0 +1,68 @@
+###########################################################
+#                                                         #
+# Anotacion taxonomica y funcional de metagenomas shotgun #
+# CIGOM & UUSMB, IBT, UNAM                                #
+# 10/Julio/2017                                           #
+#                                                         #
+###########################################################
+
+
+ANOTACION TAXONOMICA
+
+1.- Los metagenomas shotgun se secuencian en formato pareado de 2X100 o 2X150 bp dependiendo el equipo empleado. Para la anotacion taxonomica, la herramienta que nos ha dado mejores resultados tanto en especificidad como en sensibilidad es Kraken v0.10.5-beta. Dicho software tiene la opcion de usar como input dos archivos de lecturas pareadas, mismas que pega consecutivamente interponiendo una N, por lo que con este metodo se generan una serie de k-meros falsos que, aunque no se puedan asignar, si ocupan recursos computacionales. Por esta razon, corremos el pipeline de Kraken concatenando los read 1 con los read 2 con un simple cat y se los damos de comer al programa como si fueran single.
+
+	kraken --preload --db /scratch/Databases/kraken/ --threads 16 --output kraken.out concat_file.fastq
+
+	kraken-report --db /scratch/Databases/kraken/ kraken.out > kraken.report
+
+2.- El reporte se encuentra en un formato dificil de parsear, por lo que nosotros lo convertimos en una matriz de abundancias de conteos crudos usando el taxid para jalar los linajes completos. El archivo de salida se llama kraken_lineage.txt
+
+	~/scripts/kraken_corrector.pl kraken.report
+
+3.- Las matrices asi obtenidas se pueden integrar con el script ~/scripts/matrix_integrator_bmk.pl para luego separar en niveles taxonomicos con ~/scripts/taxa_levels_mod_subspecies.pl y generar kronas o graficas de barras apiladas como se explica en el archivo amplicon_annot.recipe.
+
+
+ANOTACION FUNCIONAL
+
+1.- Para este paso no hacemos filtrado por calidad para evitar perdida de diversidad de secuencias verdadera, solo quitamos secuencias con Ns. De cualquier modo, las secuencias de mala calidad son de baja frecuencias y el ensamblador las dejara fuera de lo que se haya podido ensamblar. Usamos en el paso de ensamble el programa IDBA_UD v1.1.1, que requiere las secuencias pareadas en formato fasta e interleaved:
+
+	fq2fa --merge --filter file_R1.fq file_R2.fq file_merged.fa
+
+	idba_ud -r file_merged.fa -o idba_out --step 10 --num_threads 32
+
+2.- La salida de este paso en el directorio idba_out es una serie de archivos que contienen las graficas y resultaods de ensamble intermedios generados en cada step. Dichos archivos ocupan mucho espacio y no sirven para los pasos posteriores de analisis por lo que, a menos que estes haciendo un benchmark de ensambladores, y aun asi dudo que los uses, se recomienda eliminarlos. Hay dos archivos utiles: contig.fa y scaffold.fa, el segundo tiene secuencias mas largas pero que contienen Ns por lo que no sirve para hacer la prediccion de secuencias codificantes, pero si para la reconstruccion de genomas por ejemplo. Sacamos las estadisticas del esnamble sobre contig.fa (N50, N90, contig mas largo, promedio de tamanio, etc) con el script de perl stats.pl:
+
+	~/scripts/stats.pl contig.fa
+
+Y corremos un mapeo de las lecturas crudas sobre los fragmentos resconstruidos con BWA v0.7.12-r1039 para establecer cuantas lecturas se quedan fuera del ensamble y que no se estarian tomando en cuenta para el analisis posterior:
+
+	bwa index -p indice contig.fa && bwa mem -t 16 indice file_R1.fastq file_R2.fastq |samtools view -Sb - | samtools sort - file.sorted && samtools flagstat file.sorted.bam > stats.map.txt
+
+3.- Hacemos la prediccion de CDS sobre contig.fa usando MetaGeneMark v3.26:
+
+	gmhmmp -a -d -f G -m /home/ales/bin/MetaGeneMark_linux_64/mgm/MetaGeneMark_v1.mod -A prot.fasta -D genes.fasta contig.fa -o file.gff
+
+El formato de salida en proteinas y nucleotidos de MGM contiene lineas en blanco y las secuencias no estan en una sola linea. Yo lo formateo con un script en perl (~/scripts/one_line.pl), pero tambien se puede hacer con un sed.
+
+4.- Sobre las secuencias codificantes predichas calculamos la cobertura sobre cada gen usando el mapeo del paso 2 con BWA y el archivo gff del paso 3. Es necesario un archivo en formato bed que contenga, para cada contig, las coordenadas de los genes y el identificador de dicho gen. Un ejemplo del archivo en formato bed seria:
+
+contig-120_0	3	3017	gene_id=1
+contig-120_0	3020	6079	gene_id=2
+contig-120_0	6282	7724	gene_id=3
+contig-120_0	7833	9023	gene_id=4
+contig-120_1	125	454	gene_id=5
+contig-120_1	467	1528	gene_id=6
+contig-120_1	1619	1996	gene_id=7
+
+Con el archivo bed y el bam ordenado generado en los mapeos corremos:
+
+	/home/ales/bin/bedtools2/bin/coverageBed -abam file.sorted.bam -b file_bed.txt > file_perc.cov
+
+El file de coberturas nos sirve para establecer la abundancia de cada gene en el metagenoma y la longitud del mismo que pudo ser cubierta con el mapeo.
+
+5.- Lo que sigue es la prediccion del potencial metabolico de las secuencias predichas como codificantes. Para esto, corremos blastp sobre las secuencias en aminoacidos contra la base de datos de SwissProt que viene con la distribucion de Trinotate y generamos el archivo blastp.out. Tambien generamos otros archivos de la anotacion de dominios funcionales con hmmer contra PFAM, buscamos secuencias de dominios transmembranales y de peptido senial e integramos todo en una tabla que contendra ademas, las definiciones de KEGG, GO, COG y eggnog correspondientes al mejor hit de blast. Todo esto lo hace automaticamente el script de perl run_trinotate_metagenomes.pl, mismo que se encarga de mandar automaticamente los jobs y generar la tabla final.
+
+Usage: /home/ales/scripts/run_trinotate_metagenomes.pl <jobname> <genes.fasta> <prot.fasta> <CPUs> <arc|bac_p|bac_n>
+
+Lo que sigue para usar la informacion de anotacion, es parsear la tabla de la forma mas conveniente. Por ahora hemos usado unicamente la informacion de KEGG para reportar funcion en el CIGOM, pero cuando se buscan funciones especificas, se pueden usar tambien las predicciones de PFAM, como se hizo para buscar dominios de bacteriocinas en el metagenoma del queso por ejemplo.
+

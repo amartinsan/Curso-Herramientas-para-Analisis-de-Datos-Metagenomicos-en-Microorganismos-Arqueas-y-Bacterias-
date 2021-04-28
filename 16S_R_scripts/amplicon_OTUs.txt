@@ -1,0 +1,126 @@
+##########################################################################
+#                                                                        #
+# Analisis de diversidad de OTUs a partir de un metagenoma de amplicones #
+# CIGOM & UUSMB, IBT, UNAM                                               #
+# 10/Julio/2017                                                          #
+#                                                                        #
+##########################################################################
+
+1.- Reconstruccion de amplicon original. Como la secuenciacion se realiza en formato pareado de 2X300 bp para un amplicon de ~450 bp, se inicia con un paso de extension de fragmentos usando Flash v1.2.11. Este paso se realiza por muestra.
+
+	flash -r 300 -f 450 -s 30 -t 2 -o flash_out *R1.fastq *R2.fastq
+
+2.- Convertir flash_out.extendedFrags.fastq en flash_out.extendedFrags.fasta. El programa fq2fa viene con la distribucion del ensamblador IDBA_UD, pero igual se puede usar una funcion de awk o un scriptcito en perl.
+	
+	fq2fa flash_out.extendedFrags.fastq flash_out.extendedFrags.fasta
+
+3.- Las secuencias extendidas se usan como input para desreplicar al 100%, es decir, eliminar secuencias identicas con el fin de facilitar el trabajo computacional. El flag --sizeout permite guardar en el header la informacion del numero de secuencias identicas. Este paso se realiza por muestra.
+	
+	vsearch --derep_fulllength flash_out.extendedFrags.fasta --output flash_out.extendedFrags.fasta_derep --sizeout --strand both --threads 4
+
+4.- Los archivos fasta desreplicados son el input para el paso de eliminacion de quimeras. Aun cuando se recomienda hacer este paso juntando el mayor numero de muestras posible, puede ser muy tardado, por lo que lo mas conveniente cuando son mas de 50 muestras es hacerlo individualmente.
+
+	vsearch --uchime_denovo flash_out.extendedFrags.fasta_derep --nonchimeras flash_out.extendedFrags.fasta_derep_nonchim.fasta --threads 8
+
+5.- Las secuencias libres de quimeras se concatenan para generar OTUs al 97%.
+
+	vsearch --cluster_fast all_samples_nonchim.fasta --id 0.97 --centroids representative.fasta --id 0.97 --sizein --sizeout --strand both --threads 56 --otutabout otu_table.txt --profile profile.txt --xsize
+
+6.- El comando anterior genera como output una matriz de abundancias de OTUs otu_table.txt, misma que es filtrada de singletones, es decir OTUs unicos por muestra que contienen una sola secuencia. El archivo de salida de este paso se llama filtered_otu_table.txt
+
+	/home/ales/scripts/chimerafromOTUs.pl otu_table.txt
+
+7.- Sobre esta matriz se corren en R los analisis posteriores para calculo de alfa y beta diversidad asi como apra la busqueda de OTUs diferencialmente abundantes:
+
+	-> alfa diversidad: tabla de indices Chao1 y Shannon
+library("phyloseq")
+otu_df<-read.table("filtered_otu_table.txt", header=TRUE, row.names=1)
+otu_mat<-as.matrix(otu_df)
+taxrank_mat <- as.matrix(paste0("OTU", 1:nrow(otu_mat)))
+rownames(taxrank_mat) <- rownames(otu_mat)
+colnames(taxrank_mat) <- ("TAX")
+OTU<-otu_table(otu_mat, taxa_are_rows=TRUE)
+TAX<-tax_table(taxrank_mat)
+physeq = phyloseq(OTU, TAX)
+diversity_index<-as.data.frame(round(estimate_richness(physeq, measures=c("Observed", "Chao1", "Shannon")), 2))
+diversity_index2<-data.frame(Sample=rownames(diversity_index))
+diversity_index3<-cbind(diversity_index2, diversity_index)
+colnames(diversity_index3)=c("Sample","Observed", "Chao1", "se.chao1","Shannon")
+write.table(diversity_index3, "alpha_diversity_index.txt", quote = FALSE, sep = "\t", row.names = FALSE, col.names=TRUE)
+
+	-> esfuerzo de muestreo: Grafico de acumulacion de OTUs
+library("phyloseq")
+library("metagenomeSeq")
+library("vegan")
+library("MASS")
+otu_df<-read.table("filtered_otu_table.txt", header=TRUE, row.names=1, sep="\t")
+otu_mat<-as.matrix(otu_df)
+transp_otu_mat<-t(otu_mat)
+my_color=c(rep("royalblue3", 20), rep("deepskyblue", 9), rep("tan1", 22), rep("deeppink", 18), rep("green3", 18))
+S <- specnumber(transp_otu_mat)
+raremax <- min(rowSums(transp_otu_mat))
+out<-rarecurve(transp_otu_mat, step = 200, sample = raremax, col=my_color, cex = 0.6)
+Nmax <- sapply(out, function(x) max(attr(x, "Subsample")))
+Smax <- sapply(out, max)
+png("rarefaction_locator.png",  width = 7*300, height = 5*300, res = 400, pointsize = 8)
+plot(c(1, max(Nmax)), c(1, max(Smax)), xlab = "Sample Size", ylab = "Species", type = "n", cex.lab=0.8, cex.axis=0.8)
+#abline(v = raremax)
+for (i in seq_along(out)) {
+	N <- attr(out[[i]], "Subsample")
+	lines(N, out[[i]], col = my_color[i])
+	text(locator(1), labels=row.names(transp_otu_mat)[i], cex=0.8)
+}
+dev.off()
+
+	-> beta diversidad: NMDS con indice de Bray-Curtis y paso de normalizacion con metagenomeSeq
+library("metagenomeSeq")	## Normalizando la matriz
+mydata<-load_meta(file_in)
+obj = newMRexperiment(mydata$counts)
+p = cumNormStatFast(obj)
+normalized_matrix = cumNormMat(obj, p = p)
+exportMat(normalized_matrix, file ="normal_OTU_matrix.txt")	## Matriz normalizada
+
+library("vegan")
+library("MASS")
+my_color="#FF8000"	## Definir colores
+otu_df<-read.table("normal_OTU_matrix.txt", header=TRUE, row.names=1, sep="\t")	## Leyendo la matriz normalizada
+otu_mat<-as.matrix(otu_df)
+transp_otu_mat<-t(otu_mat)	## Formateando la matriz
+cru.mds_meta <- metaMDS(transp_otu_mat, trace = FALSE)
+print(cru.mds_meta)
+var_stress<-round(cru.mds_meta$stress, 6)
+png("metamds_bray.png", width = 5*300, height = 5*300, res = 400, pointsize = 8)
+plot(cru.mds_meta, type = "n")
+text(cru.mds_meta, labels = row.names(transp_otu_mat), cex=0.6, col=my_color)
+coord<-par("usr")
+text(coord[1]+0.5, coord[3]+0.1, labels=paste("Stress: ", var_stress, sep=''), cex=0.5)	## Imprimiendo el valor de estres en el plot. Siempre debe ser <0.2 para poder considerar que el NMDS representa bien la distribucion de las muestras en el plot
+dev.off()
+
+	-> OTUs diferencialmente abundantes entre grupos de muestras, al menos cinco por cada grupo: Es necesario tener un archivo de metadata donde especificas a que categoria corresponde cada muestra y la matriz de OTUs de la misma. Ejemplo de metadata:
+Sample_ID	Origin
+FON_A1_1	Perdido
+FON_A2_1	Perdido
+FON_A2_2	Perdido
+FON_C10_1	Campeche-bay
+FON_C11_1	Campeche-bay
+FON_C13_1	Campeche-bay
+
+library("metagenomeSeq")
+mydata<-load_meta("rmv_filtered_otu_table.txt")
+obj = newMRexperiment(mydata$counts)
+p = cumNormStatFast(obj)
+normalized_matrix = cumNormMat(obj, p = p)
+exportMat(normalized_matrix, file ="normal_filtered_otu_table.txt") ## Matriz normalizada que contiene solo las muestras a comparar. Se puede usar la matriz generada antes si es que se van a usar todas las muestras
+mydata<-load_meta("normal_filtered_otu_table.txt")
+mymetadata<-load_phenoData("MMF_metadata.txt", tran = TRUE, sep = "\t")
+phenotypeData =AnnotatedDataFrame(mymetadata)
+sogom<-newMRexperiment(mydata$counts, phenoData=phenotypeData)
+sogom<- filterData(sogom, present = 3, depth = 1)
+sogom<-cumNorm(sogom, p = cumNormStatFast(sogom))
+s<-normFactors(sogom)
+mod= model.matrix(~1+Origin, data = pData(sogom))
+fit_alif = fitFeatureModel(sogom, mod)
+coeficientes<-MRcoefs(fit_alif)
+dim(coeficientes)
+head(MRcoefs(fit_alif), 20)	## Imprime los 20 OTUs mas diferencialmente abundantes
+

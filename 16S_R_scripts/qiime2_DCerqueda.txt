@@ -1,0 +1,59 @@
+#######import fastq single end demult format, casava
+
+###Los archivos deben tener este formato sampleID_barcodenumber_L001_R1_001.fastq.gz
+
+qiime tools import --type 'SampleData[SequencesWithQuality]' --input-path folder_entrada --source-format CasavaOneEightSingleLanePerSampleDirFmt --output-path salida_demux-single-end.qza
+
+####  visualizar
+
+qiime demux summarize --i-data entrada.qza --o-visualization salida.qzv
+
+## visualizar
+qiime tools view salida.qzv
+
+##Procesamiento con dada2
+
+qiime dada2 denoise-single --i-demultiplexed-seqs entrada.qza --p-trim-left 0 --p-trunc-len 125 --p-n-threads 22 --output-dir salida --verbose 
+
+##### Asignacion taxonomica con vsearch
+
+qiime feature-classifier classify-consensus-vsearch --i-query  representative_sequences.qza --i-reference-reads ~/SILVA_128_16s_only.qza --i-reference-taxonomy ~/taxonomy_SILVA_128_16s_only.qza --p-threads 22 --output-dir vsearch_tax --verbose
+
+
+###### resumen de la tabla para ver la prufundidad de secuenciacion de cada muestra
+
+qiime feature-table summarize --i-table  table.qza --o-visualization table.qzv
+
+##### alineamiento
+
+qiime alignment mafft --i-sequences representative_sequences.qza --p-n-threads 22 --verbose --o-alignment alig.qza
+
+### filtrar alineamiento 
+
+qiime alignment mask --i-alignment alig.qza --o-masked-alignment masked.qza --verbose
+
+######## filogenia
+
+qiime phylogeny fasttree --i-alignment masked.qza --p-n-threads 22 --o-tree tree.qza
+
+## rarefaccion
+
+qiime feature-table rarefy --i-table table.qza --p-sampling-depth <depth number> --output-dir salida --verbose
+
+qiime tools export rarefied_table.qza --output-dir exported-feature-table
+
+qiime tools export ../vsearch/classification.qza --output-dir taxonomy
+
+biom convert -i  feature-table.biom -o table.from_biom.txt --to-tsv
+
+#### Arreglar la tabla en R
+library(dplyr)
+otus<-read.csv("table.from_biom.txt",header=T,check.names=F,sep="\t",skip=1)
+tax<-read.csv("taxonomy.tsv",header=T,check.names=F,sep="\t")
+colnames(tax)[1]<-"#OTU ID"
+tax$taxonomy<-gsub("D_[0-9]__","",tax$taxonomy)
+tabla<-left_join(otus,tax,by="#OTU ID") %>% select(-Confidence)
+write.table(tabla,file="tabla.txt",quote=F,row.names=F,sep="\t")
+system('biom convert -i tabla.txt -o new_otu_table.biom --to-json --table-type="OTU table" --process-obs-metadata taxonomy',intern = FALSE)
+
+
