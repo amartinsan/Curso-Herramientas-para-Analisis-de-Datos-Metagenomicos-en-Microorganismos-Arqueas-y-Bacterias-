@@ -6,9 +6,7 @@ Para datos de amplicones se uso QIIME2 2019.10 los archivos de salida fueron imp
 
 Para datos de WMS se uso squeezemeta con los 21 pasos  del pipeline
 
-- buena parte de la guia esta en <a href="https://github.com/AdrianMtz-Santana/Curso-Herramientas-par-Analisis-de-Datos-MEtagenomicos-en-Microorganismos-Arqueas-y-Bacterias-/blob/5a25a753a5d7919352b0d9f9c28a49e12b8b8f5c/Curso_Feb2020/Receta_phylomicrobiome_correct.pdf"> </a> 
-
-
+- buena parte de la guia esta en [Receta](https://github.com/AdrianMtz-Santana/Curso-Herramientas-par-Analisis-de-Datos-MEtagenomicos-en-Microorganismos-Arqueas-y-Bacterias-/blob/47a448ddc05f53a3e063b6fc9d6230688a26fc95/Curso_Feb2020/Receta_phylomicrobiome_correct.pdf)
 
 
 
