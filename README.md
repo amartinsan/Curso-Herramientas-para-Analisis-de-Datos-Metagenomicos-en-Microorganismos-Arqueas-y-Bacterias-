@@ -1,4 +1,4 @@
-<h1 class="h1">Curso Herramientas par Analisis de Datos Metagenomicos en Microorganismos "Arqueas y Bacterias" </h1>
+<h1 class="h1">Curso Herramientas para Analisis de Datos Metagenomicos en Microorganismos "Arqueas y Bacterias" </h1>
 
 Se impartio del 12 al 13 de Febrero de 2020 con una duracion de 16 hrs.
 
