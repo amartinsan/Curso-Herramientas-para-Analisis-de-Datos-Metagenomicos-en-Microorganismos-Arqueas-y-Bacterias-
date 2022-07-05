@@ -12,5 +12,7 @@ Para datos de WMS se uso squeezemeta con los 21 pasos  del pipeline
 
 <h1 class="h1">Extras </h1>
 
-Tambien se usao Metaphlan y graphlan como extra para analisis del metagenoma.
+- Se agrego tambien una guia de la libreria marmap para hacer mapas con topografía y batimetría en R 
+- Tambien se usao Metaphlan y graphlan como extra para analisis del metagenoma.
+
 
