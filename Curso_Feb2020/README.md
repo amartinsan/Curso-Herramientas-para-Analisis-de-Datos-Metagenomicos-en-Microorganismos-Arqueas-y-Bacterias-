@@ -1,13 +1,18 @@
-<h1 class="h1">Curso Herramientas par Analisis de Datos MEtagenomicos en Microorganismos "Arqueas y Bacterias" </h1>
+<h1 class="h1">Curso Herramientas par Analisis de Datos Metagenomicos en Microorganismos "Arqueas y Bacterias" </h1>
 
-Se impartio del 12 al 13 de Febrero con una duracion de 16 hrs.
+Se impartio del 12 al 13 de Febrero de 2020 con una duracion de 16 hrs.
 
 Para datos de amplicones se uso QIIME2 2019.10 los archivos de salida fueron importados a R y trabajados con las librerias de "phyloseq" y "microbiome"
 
-Para datos de WMS se uso squeezemeta todos los paso del pipeline
+Para datos de WMS se uso squeezemeta con los 21 pasos  del pipeline
+
+- buena parte de la guia esta en <a href="https://github.com/AdrianMtz-Santana/Curso-Herramientas-par-Analisis-de-Datos-MEtagenomicos-en-Microorganismos-Arqueas-y-Bacterias-/blob/5a25a753a5d7919352b0d9f9c28a49e12b8b8f5c/Curso_Feb2020/Receta_phylomicrobiome_correct.pdf"> </a> 
+
+
+
 
 
 <h1 class="h1">Extras </h1>
 
-Tambien se usao Metaphlan y graphlan como extra para analisi de metagenoma.
+Tambien se usao Metaphlan y graphlan como extra para analisis del metagenoma.
 
