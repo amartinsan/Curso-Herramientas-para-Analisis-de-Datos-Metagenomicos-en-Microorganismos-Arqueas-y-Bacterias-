@@ -1,11 +1,3 @@
-###########################################################
-#                                                         #
-# Anotacion taxonomica y funcional de metagenomas shotgun #
-# CIGOM & UUSMB, IBT, UNAM                                #
-# 10/Julio/2017                                           #
-#                                                         #
-###########################################################
-
 
 ANOTACION TAXONOMICA
 
