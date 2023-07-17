@@ -1,10 +1,6 @@
-##########################################################################
-#                                                                        #
+
 # Analisis de diversidad de OTUs a partir de un metagenoma de amplicones #
-# CIGOM & UUSMB, IBT, UNAM                                               #
-# 10/Julio/2017                                                          #
-#                                                                        #
-##########################################################################
+
 
 1.- Reconstruccion de amplicon original. Como la secuenciacion se realiza en formato pareado de 2X300 bp para un amplicon de ~450 bp, se inicia con un paso de extension de fragmentos usando Flash v1.2.11. Este paso se realiza por muestra.
 
